@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Local Offline AI Chatbot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    /* Offline-safe fallback variables & layout rules if opened without CDN access */
+    :root {
+      color-scheme: dark;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #090d16;
+      color: #f8fafc;
+      margin: 0;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    @keyframes typingBounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+      40% { transform: translateY(-4px); opacity: 1; }
+    }
+    .dot-1 { animation: typingBounce 1.2s infinite 0s; }
+    .dot-2 { animation: typingBounce 1.2s infinite 0.2s; }
+    .dot-3 { animation: typingBounce 1.2s infinite 0.4s; }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex bg-slate-950 text-slate-100">
+
+  <!-- Left Sidebar: Conversations, Personas & Offline Memory -->
+  <aside id="sidebar" class="w-72 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0 transition-all duration-200 z-30 fixed lg:static inset-y-0 left-0 -translate-x-full lg:translate-x-0">
+    <!-- Brand Header -->
+    <div class="h-14 px-4 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-emerald-500/10">
+          <i class="fa-solid fa-microchip text-sm"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-sm text-white leading-tight">LocalAI Chat</h1>
+          <span class="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+            100% Offline Ready
+          </span>
+        </div>
+      </div>
+      <button onclick="toggleSidebar()" class="lg:hidden p-1.5 text-slate-400 hover:text-white rounded-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <!-- New Chat Button -->
+    <div class="p-3">
+      <button onclick="createNewSession()" class="w-full py-2.5 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-500/15 transition">
+        <i class="fa-solid fa-plus"></i>
+        <span>New Local Chat</span>
+      </button>
+    </div>
+
+    <!-- Persona Selector -->
+    <div class="px-3 pb-2">
+      <label class="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 px-1">Assistant Persona</label>
+      <select id="personaSelect" onchange="changePersona(this.value)" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+        <option value="general">🧠 General Offline Assistant</option>
+        <option value="coder">💻 Offline Code &amp; Algorithms</option>
+        <option value="math">📐 Math, Logic &amp; Converter</option>
+        <option value="writer">✍️ Writing, Summary &amp; Notes</option>
+      </select>
+    </div>
+
+    <!-- Saved Chat Sessions List -->
+    <div class="px-3 pt-2 pb-1 flex items-center justify-between">
+      <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-1">Conversations</span>
+      <button onclick="clearAllSessions()" class="text-[10px] text-slate-500 hover:text-rose-400 transition px-1" title="Clear all saved history">Clear All</button>
+    </div>
+    <div id="sessionList" class="flex-1 overflow-y-auto px-3 space-y-1"></div>
+
+    <!-- Offline Memory & Localhost Footer -->
+    <div class="p-3 border-t border-slate-800 bg-slate-950/50 space-y-2">
+      <button onclick="toggleMemoryModal()" class="w-full py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 text-xs text-slate-200 flex items-center justify-between transition">
+        <span class="flex items-center gap-2">
+          <i class="fa-solid fa-database text-emerald-400"></i>
+          <span>Custom Memory Bank</span>
+        </span>
+        <span id="memoryCountBadge" class="px-1.5 py-0.5 rounded-md bg-slate-900 text-[10px] mono text-emerald-300">0</span>
+      </button>
+
+      <button onclick="toggleSettingsModal()" class="w-full py-2 px-3 rounded-xl bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 text-xs text-slate-200 flex items-center justify-between transition">
+        <span class="flex items-center gap-2">
+          <i class="fa-solid fa-server text-sky-400"></i>
+          <span>Engine Settings</span>
+        </span>
+        <span id="engineShortBadge" class="text-[10px] mono text-slate-400">In-Browser JS</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Chat Area -->
+  <div class="flex-1 flex flex-col h-full overflow-hidden bg-slate-950 relative">
+    <!-- Top Header -->
+    <header class="h-14 border-b border-slate-800/90 bg-slate-900/70 backdrop-blur px-4 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white">
+          <i class="fa-solid fa-bars text-xs"></i>
+        </button>
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 id="currentChatTitle" class="font-semibold text-sm text-white truncate max-w-[200px] sm:max-w-md">Offline AI Assistant</h2>
+            <span id="networkBadge" class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Zero-Internet Mode
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Runs 100% locally in your browser or via localhost Ollama/LM Studio</p>
+        </div>
+      </div>
+
+      <!-- Engine Switcher & Export -->
+      <div class="flex items-center gap-2">
+        <div class="hidden sm:flex items-center bg-slate-950 border border-slate-800 rounded-xl p-1 text-xs">
+          <button id="btnModeBrowser" onclick="setEngine('browser')" class="px-2.5 py-1 rounded-lg font-medium bg-emerald-500 text-slate-950 transition">
+            Built-In Offline Brain
+          </button>
+          <button id="btnModeOllama" onclick="setEngine('ollama')" class="px-2.5 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition">
+            Localhost Ollama
+          </button>
+        </div>
+        <button onclick="exportChatMarkdown()" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200 flex items-center gap-1.5 transition" title="Export Conversation as Markdown">
+          <i class="fa-solid fa-download text-sky-400"></i>
+          <span class="hidden md:inline">Export</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Quick Offline Capabilities Bar -->
+    <div class="px-4 py-2 bg-slate-900/40 border-b border-slate-800/60 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+      <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 shrink-0">Try Offline:</span>
+      <button onclick="sendQuickPrompt('Solve: (145 * 28) / 4 + sqrt(256) and convert 72 km/h to mph')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition">
+        🧮 Math &amp; Unit Converter
+      </button>
+      <button onclick="sendQuickPrompt('Write a Python function for binary search and explain its time complexity')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition">
+        💻 Generate Code Offline
+      </button>
+      <button onclick="sendQuickPrompt('Remember that my favorite programming language is Rust and my project deadline is Friday')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition">
+        🧠 Teach Custom Fact
+      </button>
+      <button onclick="sendQuickPrompt('Summarize this text: Artificial intelligence models that run locally on consumer hardware provide complete data privacy, zero network latency, and full offline reliability without cloud subscriptions.')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition">
+        📝 Offline Text Summarizer
+      </button>
+      <button onclick="sendQuickPrompt('Explain how photosynthesis works in simple terms')" class="shrink-0 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[11px] text-slate-300 transition">
+        📚 Science &amp; Knowledge
+      </button>
+    </div>
+
+    <!-- Chat Messages Stream -->
+    <main id="chatContainer" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4"></main>
+
+    <!-- Bottom Message Composer -->
+    <div class="p-3 sm:p-4 border-t border-slate-800/80 bg-slate-900/60 backdrop-blur">
+      <form id="chatForm" class="max-w-4xl mx-auto flex flex-col gap-2">
+        <div class="flex items-end gap-2 bg-slate-900 border border-slate-700/80 focus-within:border-sky-400 rounded-2xl p-2 shadow-inner transition">
+          <textarea
+            id="userInput"
+            rows="1"
+            placeholder="Ask anything offline (math, coding, writing, knowledge, or 'Remember that...')..."
+            class="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 px-2 py-1.5 focus:outline-none resize-none max-h-36"
+          ></textarea>
+          <button
+            type="submit"
+            id="sendBtn"
+            class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-400 to-sky-400 hover:from-emerald-300 hover:to-sky-300 text-slate-950 font-semibold text-xs sm:text-sm flex items-center gap-1.5 shadow-md transition shrink-0"
+          >
+            <span>Send</span>
+            <i class="fa-solid fa-paper-plane text-xs"></i>
+          </button>
+        </div>
+        <div class="flex items-center justify-between px-1 text-[11px] text-slate-500">
+          <span id="statusFooter">Engine: Built-In Offline JavaScript Brain (No internet used)</span>
+          <span>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 mono text-[10px]">Enter</kbd> to send, <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 mono text-[10px]">Shift+Enter</kbd> for new line</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 1: Custom Offline Memory Bank -->
+  <div id="memoryModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[82vh]">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-database text-emerald-400"></i>
+          <h3 class="font-semibold text-sm text-white">Offline Custom Memory &amp; Facts</h3>
+        </div>
+        <button onclick="toggleMemoryModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4 space-y-3 overflow-y-auto flex-1 text-xs">
+        <p class="text-slate-400 leading-relaxed">
+          Teach the offline chatbot facts, notes, or custom Q&amp;A triggers. Everything is stored locally in your browser's <code class="text-emerald-300">localStorage</code> and works without internet.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <input id="memKeyInput" type="text" placeholder="Topic / Trigger (e.g. wifi password)" class="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200" />
+          <input id="memValInput" type="text" placeholder="Fact / Response to remember..." class="sm:col-span-2 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200" />
+        </div>
+        <button onclick="addCustomMemoryFromModal()" class="w-full py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold transition">
+          + Save to Offline Memory
+        </button>
+        <div id="memoryListContainer" class="space-y-1.5 pt-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: Localhost Engine Settings (Ollama / LM Studio) -->
+  <div id="settingsModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div class="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-server text-sky-400"></i>
+          <h3 class="font-semibold text-sm text-white">Offline AI Engine Configuration</h3>
+        </div>
+        <button onclick="toggleSettingsModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Active Offline Engine</label>
+          <select id="engineSelectModal" onchange="setEngine(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200">
+            <option value="browser">Built-In Browser Brain (Zero install, 100% offline JS)</option>
+            <option value="ollama">Localhost Ollama / LM Studio (Local hardware LLM)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-slate-300 font-medium mb-1">Local Ollama / OpenAI-Compatible Endpoint</label>
+          <input id="ollamaEndpoint" type="text" value="http://localhost:11434" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 mono" />
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-slate-300 font-medium">Local Model Name</label>
+            <button onclick="detectOllamaModels()" class="text-sky-400 hover:underline text-[11px]">Auto-Detect Installed Models</button>
+          </div>
+          <input id="ollamaModel" type="text" value="llama3.2" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 mono" />
+          <p id="ollamaDetectStatus" class="text-[11px] text-slate-400 mt-1"></p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 leading-relaxed">
+          <b class="text-slate-200">Zero-Internet Operation:</b><br/>
+          • <b>Built-In Browser Brain</b> runs entirely inside this HTML file's JavaScript engine—solving math, writing code, summarizing text, answering knowledge queries, and remembering facts offline.<br/>
+          • <b>Localhost Ollama</b> connects to your local machine (<code class="text-sky-300">OLLAMA_ORIGINS="*" ollama serve</code>) with zero internet needed.
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+        <button onclick="toggleSettingsModal()" class="px-4 py-1.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEYS = {
+      SESSIONS: 'local_offline_ai_sessions_v1',
+      MEMORY: 'local_offline_ai_memory_v1',
+      SETTINGS: 'local_offline_ai_settings_v1'
+    };
+
+    let activeEngine = 'browser'; // 'browser' | 'ollama'
+    let activePersona = 'general';
+    let sessions = [];
+    let currentSessionId = null;
+    let customMemories = [];
+
+    // Built-in Offline Knowledge Graph & Code Templates
+    const OFFLINE_KNOWLEDGE = [
+      {
+        keywords: ['photosynthesis', 'plant', 'chlorophyll', 'sunlight'],
+        title: 'Photosynthesis',
+        answer: `**Photosynthesis** is the biochemical process by which green plants, algae, and certain bacteria convert light energy into chemical energy.\n\n• **Formula:** \`6CO2 + 6H2O + Light Energy → C6H12O6 (Glucose) + 6O2\`\n• **Stage 1 (Light-Dependent Reactions):** Occurs in the thylakoid membranes where chlorophyll absorbs sunlight, splitting water molecules and releasing oxygen while generating ATP and NADPH.\n• **Stage 2 (Calvin Cycle):** Uses ATP and NADPH in the stroma to fix carbon dioxide into glucose.`
+      },
+      {
+        keywords: ['binary search', 'search algorithm', 'logarithmic'],
+        title: 'Binary Search Algorithm',
+        answer: `**Binary Search** finds the position of a target value within a **sorted array** in \`O(log n)\` time complexity by repeatedly dividing the search interval in half.\n\n\`\`\`python\ndef binary_search(arr, target):\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n\n# Example usage\nnums = [2, 5, 8, 12, 16, 23, 38, 56, 72, 91]\nprint(binary_search(nums, 23))  # Output: 5\n\`\`\`\n• **Time Complexity:** \`O(log n)\` worst & average case, \`O(1)\` best case.\n• **Space Complexity:** \`O(1)\` iterative.`
+      },
+      {
+        keywords: ['quicksort', 'sorting', 'sort array', 'merge sort'],
+        title: 'Sorting Algorithm (QuickSort)',
+        answer: `Here is a clean, offline implementation of **QuickSort** in Python and JavaScript:\n\n\`\`\`python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\`\`\`\n• **Average Time Complexity:** \`O(n log n)\`\n• **Worst Case:** \`O(n²)\` (mitigated by middle or random pivot selection).`
+      },
+      {
+        keywords: ['fibonacci', 'dynamic programming', 'memoization'],
+        title: 'Fibonacci Sequence (O(n) Iterative)',
+        answer: `Here is an optimal \`O(n)\` time and \`O(1)\` space implementation of the **Fibonacci sequence**:\n\n\`\`\`javascript\nfunction fibonacci(n) {\n  if (n <= 1) return n;\n  let prev = 0, curr = 1;\n  for (let i = 2; i <= n; i++) {\n    const next = prev + curr;\n    prev = curr;\n    curr = next;\n  }\n  return curr;\n}\nconsole.log(fibonacci(10)); // 55\n\`\`\``
+      },
+      {
+        keywords: ['relativity', 'einstein', 'e=mc2', 'speed of light', 'gravity'],
+        title: 'Theory of Relativity',
+        answer: `Albert Einstein's **Theory of Relativity** encompasses two interrelated theories:\n\n1. **Special Relativity (1905):** Based on two postulates—the laws of physics are identical in all inertial frames, and the speed of light in a vacuum (\`c ≈ 299,792,458 m/s\`) is constant for all observers. This leads to time dilation, length contraction, and mass-energy equivalence (\`E = mc²\`).\n2. **General Relativity (1915):** Describes gravity not as a traditional force, but as the geometric curvature of four-dimensional spacetime caused by mass and energy.`
+      },
+      {
+        keywords: ['dna', 'rna', 'genetics', 'nucleotide', 'gene'],
+        title: 'DNA & Molecular Genetics',
+        answer: `**DNA (Deoxyribonucleic Acid)** is a double-helix polymer that carries the genetic instructions for the development and functioning of all known living organisms.\n\n• **Base Pairing:** Adenine (A) pairs with Thymine (T), and Cytosine (C) pairs with Guanine (G) via hydrogen bonds.\n• **Central Dogma:** \`DNA → Transcription → mRNA → Translation → Protein\`.`
+      },
+      {
+        keywords: ['http', 'rest api', 'fetch', 'status code', 'json'],
+        title: 'HTTP & Fetch API Template',
+        answer: `Here is a self-contained JavaScript \`fetch\` request with timeout and error handling:\n\n\`\`\`javascript\nasync function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {\n  const controller = new AbortController();\n  const id = setTimeout(() => controller.abort(), timeoutMs);\n  try {\n    const response = await fetch(url, { ...options, signal: controller.signal });\n    if (!response.ok) throw new Error(\`HTTP \${response.status}\`);\n    return await response.json();\n  } finally {\n    clearTimeout(id);\n  }\n}\n\`\`\``
+      },
+      {
+        keywords: ['sql', 'database', 'join', 'query', 'select'],
+        title: 'SQL Queries & Joins Guide',
+        answer: `Common **SQL Query** patterns for relational databases:\n\n\`\`\`sql\nSELECT \n  u.id,\n  u.name,\n  COUNT(o.id) AS total_orders,\n  COALESCE(SUM(o.amount), 0) AS lifetime_spend\nFROM users u\nLEFT JOIN orders o ON u.id = o.user_id\nWHERE u.active = 1\nGROUP BY u.id, u.name\nHAVING COUNT(o.id) > 0\nORDER BY lifetime_spend DESC;\n\`\`\``
+      }
+    ];
+
+    // 1. Offline Safe Math & Unit Conversion Engine
+    function evaluateOfflineMathAndUnits(input) {
+      const lower = input.toLowerCase().trim();
+      const results = [];
+
+      // Unit conversions (km <-> miles, c <-> f, kg <-> lbs, cm <-> inches)
+      const unitPatterns = [
+        { regex: /(-?\d+(?:\.\d+)?)\s*(?:km|kilometers?|km\/h)\s*(?:to|in)\s*(?:mi|miles?|mph)/i, fn: v => `${v} km = **${(v * 0.621371).toFixed(2)} miles**` },
+        { regex: /(-?\d+(?:\.\d+)?)\s*(?:mi|miles?|mph)\s*(?:to|in)\s*(?:km|kilometers?|km\/h)/i, fn: v => `${v} miles = **${(v * 1.60934).toFixed(2)} km**` },
+        { regex: /(-?\d+(?:\.\d+)?)\s*°?c(?:elsius)?\s*(?:to|in)\s*°?f(?:ahrenheit)?/i, fn: v => `${v}°C = **${((v * 9/5) + 32).toFixed(1)}°F**` },
+        { regex: /(-?\d+(?:\.\d+)?)\s*°?f(?:ahrenheit)?\s*(?:to|in)\s*°?c(?:elsius)?/i, fn: v => `${v}°F = **${(((v - 32) * 5) / 9).toFixed(1)}°C**` },
+        { regex: /(-?\d+(?:\.\d+)?)\s*(?:kg|kilograms?)\s*(?:to|in)\s*(?:lbs?|pounds?)/i, fn: v => `${v} kg = **${(v * 2.20462).toFixed(2)} lbs**` },
+        { regex: /(-?\d+(?:\.\d+)?)\s*(?:lbs?|pounds?)\s*(?:to|in)\s*(?:kg|kilograms?)/i, fn: v => `${v} lbs = **${(v * 0.453592).toFixed(2)} kg**` }
+      ];
+
+      for (const pat of unitPatterns) {
+        const m = input.match(pat.regex);
+        if (m) results.push(`• **Unit Conversion:** ${pat.fn(parseFloat(m[1]))}`);
+      }
+
+      // Percentage calculations: "X% of Y"
+      const pctMatch = input.match(/(\d+(?:\.\d+)?)\s*%\s*of\s*(\d+(?:\.\d+)?)/i);
+      if (pctMatch) {
+        const pct = parseFloat(pctMatch[1]);
+        const total = parseFloat(pctMatch[2]);
+        results.push(`• **Percentage:** ${pct}% of ${total} = **${((pct / 100) * total).toFixed(4).replace(/\.?0+$/, '')}**`);
+      }
+
+      // Extract mathematical expressions containing numbers & operators
+      const cleanedMath = lower
+        .replace(/solve:?|calculate:?|what is|evaluate:?/gi, '')
+        .replace(/and convert.*/gi, '')
+        .replace(/sqrt\(/g, 'Math.sqrt(')
+        .replace(/sin\(/g, 'Math.sin(')
+        .replace(/cos\(/g, 'Math.cos(')
+        .replace(/tan\(/g, 'Math.tan(')
+        .replace(/log\(/g, 'Math.log10(')
+        .replace(/pi\b/g, 'Math.PI')
+        .replace(/\^/g, '**')
+        .trim();
+
+      if (/[0-9]/.test(cleanedMath) && /[+\-*/%]|Math\./.test(cleanedMath)) {
+        // Validate expression only contains safe math tokens
+        const stripped = cleanedMath.replace(/Math\.(sqrt|sin|cos|tan|log10|PI|pow|abs|round)/g, '');
+        if (/^[0-9+\-*/().%\s,*]+$/.test(stripped)) {
+          try {
+            const val = Function(`"use strict"; return (${cleanedMath});`)();
+            if (typeof val === 'number' && !isNaN(val) && isFinite(val)) {
+              const formattedVal = Number.isInteger(val) ? val : parseFloat(val.toFixed(6));
+              results.push(`• **Math Result:** \`${cleanedMath.replace(/Math\./g, '')}\` = **${formattedVal}**`);
+            }
+          } catch (e) {}
+        }
+      }
+
+      return results.length > 0 ? results.join('\n') : null;
+    }
+
+    // 2. Offline Text Summarizer & Analyzer
+    function summarizeAndAnalyzeOffline(textToAnalyze) {
+      const sentences = textToAnalyze
+        .split(/(?<=[.!?])\s+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 10);
+
+      const words = textToAnalyze.trim().split(/\s+/).filter(Boolean);
+      const wordCount = words.length;
+      const charCount = textToAnalyze.length;
+      const readTimeSec = Math.max(1, Math.round((wordCount / 200) * 60));
+
+      // Score sentences by word frequency
+      const stopWords = new Set(['the','and','for','that','this','with','from','are','was','were','have','has','had','not','but','you','all','can','her','his','they','into','which','their']);
+      const freq = {};
+      words.forEach(w => {
+        const clean = w.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (clean.length > 2 && !stopWords.has(clean)) {
+          freq[clean] = (freq[clean] || 0) + 1;
+        }
+      });
+
+      const topKeywords = Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6)
+        .map(e => `\`${e[0]}\``)
+        .join(', ');
+
+      let summaryBullet = sentences[0] || textToAnalyze;
+      if (sentences.length > 2) {
+        const scored = sentences.map(s => {
+          const sWords = s.toLowerCase().split(/\s+/);
+          const score = sWords.reduce((acc, w) => acc + (freq[w.replace(/[^a-z0-9]/g, '')] || 0), 0) / Math.max(1, sWords.length);
+          return { s, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        summaryBullet = scored.slice(0, 2).map(item => `• ${item.s}`).join('\n');
+      }
+
+      return `**Offline Text Summary & Analysis:**\n\n${summaryBullet}\n\n• **Stats:** ${wordCount} words | ${charCount} characters | ~${readTimeSec}s reading time\n• **Key Terms:** ${topKeywords || 'N/A'}`;
+    }
+
+    // 3. Complete In-Browser Offline Conversational Brain
+    function generateOfflineReply(userMessage) {
+      const text = userMessage.trim();
+      const lower = text.toLowerCase();
+
+      // A. Check if user is teaching the bot a new memory ("Remember that...", "My name is...")
+      const rememberMatch = text.match(/^(?:remember\s+that|remember:?|note\s+that|save\s+fact:?)\s+(.+)$/i);
+      if (rememberMatch) {
+        const fact = rememberMatch[1].trim();
+        const keyWords = fact.split(/\s+/).slice(0, 4).join(' ');
+        saveMemoryItem(keyWords, fact);
+        return `✅ **Saved to Offline Memory!**\n\nI will remember: *"${fact}"*.\nYou can ask me about this anytime or view/edit all saved facts in the **Custom Memory Bank** on the bottom-left.`;
+      }
+
+      const nameMatch = text.match(/^my\s+name\s+is\s+([a-zA-Z0-9 _-]+)$/i);
+      if (nameMatch) {
+        const userName = nameMatch[1].trim();
+        saveMemoryItem('my name / who am i', `Your name is ${userName}.`);
+        return `Nice to meet you, **${userName}**! I've saved your name in my offline memory so I'll remember it even if you close or refresh the browser.`;
+      }
+
+      // B. Check if user is asking about something stored in Custom Memory
+      for (const mem of customMemories) {
+        const k = mem.key.toLowerCase();
+        const v = mem.value.toLowerCase();
+        const significativos = k.split(/\s+/).filter(w => w.length > 2);
+        if (lower.includes(k) || significativos.some(w => lower.includes(w)) || (lower.includes('remember') && lower.includes('what'))) {
+          if (lower.includes('what') || lower.includes('who') || lower.includes('when') || lower.includes('tell') || lower.includes(k)) {
+            return `🧠 **From Your Offline Memory Bank:**\n\n• **${mem.key}:** ${mem.value}`;
+          }
+        }
+      }
+
+      if (lower.includes('what do you remember') || lower.includes('show my memories') || lower.includes('my facts')) {
+        if (customMemories.length === 0) {
+          return `My custom memory bank is currently empty. Teach me anything offline by typing:\n\`Remember that my project deadline is Friday at 5 PM\``;
+        }
+        return `🧠 **Saved Facts in Your Offline Memory (${customMemories.length}):**\n\n` +
+          customMemories.map(m => `• **${m.key}:** ${m.value}`).join('\n');
+      }
+
+      // C. Check for Math & Unit Conversions
+      const mathResult = evaluateOfflineMathAndUnits(text);
+      if (mathResult) {
+        return `🧮 **Offline Math & Conversion Engine**\n\n${mathResult}`;
+      }
+
+      // D. Check for Text Summarization or Word Count requests
+      if (/^(summarize|summary|analyze text|word count)[:\s]/i.test(text)) {
+        const content = text.replace(/^(summarize|summary|analyze text|word count)\s*(this\s*text)?[:\s]*/i, '').trim();
+        if (content.length > 15) {
+          return summarizeAndAnalyzeOffline(content);
+        }
+      }
+
+      // E. Check Built-In Knowledge Base & Code Templates
+      let bestMatch = null;
+      let bestScore = 0;
+      for (const item of OFFLINE_KNOWLEDGE) {
+        let score = 0;
+        for (const kw of item.keywords) {
+          if (lower.includes(kw)) score += 2;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = item;
+        }
+      }
+      if (bestMatch && bestScore >= 2) {
+        return bestMatch.answer;
+      }
+
+      // F. Dynamic Code Generation requests (HTML, JS, Python)
+      if (lower.includes('write') || lower.includes('code') || lower.includes('function') || lower.includes('script')) {
+        if (lower.includes('python')) {
+          return `Here is a clean, offline **Python** template for your request:\n\n\`\`\`python\ndef main(data):\n    \"\"\"Offline generated Python utility\"\"\"\n    results = [item for item in data if item is not None]\n    return {\n        "count": len(results),\n        "items": results\n    }\n\nif __name__ == "__main__":\n    sample = ["alpha", "beta", "gamma"]\n    print(main(sample))\n\`\`\``;
+        }
+        if (lower.includes('javascript') || lower.includes('js') || lower.includes('html')) {
+          return `Here is a clean, self-contained **JavaScript** function:\n\n\`\`\`javascript\nfunction processItems(items = []) {\n  return items\n    .filter(Boolean)\n    .map((item, index) => ({ id: index + 1, value: item, timestamp: Date.now() }));\n}\n\nconsole.log(processItems(['Task 1', 'Task 2']));\n\`\`\``;
+        }
+      }
+
+      // G. Greetings & Status Checks
+      if (/^(hi|hello|hey|good morning|good evening|howdy)\b/i.test(lower)) {
+        const personaGreeting = {
+          general: "Hello! I'm your **100% Offline AI Assistant**. I run right inside your browser with zero internet required.",
+          coder: "Hey! **Offline Code Assistant** ready. Ask me for algorithms (binary search, quicksort, Fibonacci, SQL, Fetch API) or code snippets.",
+          math: "Hello! **Offline Math & Logic Engine** active. Give me equations, trigonometry, percentages, or unit conversions.",
+          writer: "Hi there! **Offline Writing & Summary Assistant** ready. Paste any paragraph prefixed with `Summarize:` to analyze and condense it offline."
+        }[activePersona];
+
+        return `${personaGreeting}\n\nHere are a few things we can do right now without internet:\n• **Calculate & Convert:** \`Solve (48 * 12) + sqrt(144) and convert 100 km to miles\`\n• **Code Offline:** \`Write a Python function for binary search\`\n• **Teach Me Facts:** \`Remember that the server IP is 192.168.1.50\`\n• **Summarize Text:** \`Summarize: [paste any article or notes]\``;
+      }
+
+      if (lower.includes('offline') || lower.includes('internet') || lower.includes('how do you work')) {
+        return `**How I Work Without Internet:**\n\n1. **Built-In Browser Engine (Active):** Everything you see—math evaluation, unit conversion, text summarization, code templates, and persistent \`localStorage\` memory—runs natively in your browser's JavaScript runtime.\n2. **Localhost Ollama / LM Studio Support:** If you have **Ollama** installed on your computer, click **Localhost Ollama** in the top bar to chat with local models like \`llama3.2\`, \`mistral\`, or \`deepseek-r1\` with your Wi-Fi completely turned off!`;
+      }
+
+      // H. Conversational Fallback with helpful context analysis
+      const wordCount = text.split(/\s+/).length;
+      if (wordCount > 35) {
+        return summarizeAndAnalyzeOffline(text);
+      }
+
+      return `I processed your message locally (**"${text}"**).\n\nBecause I am running in **100% Offline Browser Mode**, here is how to get the most out of my built-in local modules:\n• **Teach me this topic:** Reply with \`Remember that ${text} is ...\` and I will store it permanently in your offline database.\n• **Math & Conversions:** Ask \`Calculate ...\` or \`Convert X km to miles\`.\n• **Code & Algorithms:** Ask for \`binary search\`, \`quicksort\`, \`fibonacci\`, \`SQL joins\`, or \`JavaScript fetch\`.\n• **Full Local LLM:** Switch to **Localhost Ollama** in the header if you are running \`ollama serve\` on your machine.`;
+    }
+
+    // 4. Localhost Ollama Query (100% Offline on Local Machine)
+    async function queryLocalOllama(userText) {
+      const endpoint = document.getElementById('ollamaEndpoint').value.replace(/\/$/, '');
+      const model = document.getElementById('ollamaModel').value.trim() || 'llama3.2';
+
+      const currentSession = getCurrentSession();
+      const historyMessages = (currentSession?.messages || []).slice(-10).map(m => ({
+        role: m.role === 'bot' ? 'assistant' : 'user',
+        content: m.content
+      }));
+
+      // Try /api/chat first, fallback to /api/generate
+      const res = await fetch(`${endpoint}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are a helpful, concise AI assistant running locally offline.' },
+            ...historyMessages,
+            { role: 'user', content: userText }
+          ],
+          stream: false
+        })
+      });
+
+      if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
+      const data = await res.json();
+      return data?.message?.content || data?.response || 'Received empty response from local model.';
+    }
+
+    async function detectOllamaModels() {
+      const endpoint = document.getElementById('ollamaEndpoint').value.replace(/\/$/, '');
+      const statusEl = document.getElementById('ollamaDetectStatus');
+      statusEl.textContent = 'Checking localhost:11434...';
+      try {
+        const res = await fetch(`${endpoint}/api/tags`);
+        const data = await res.json();
+        if (data?.models?.length > 0) {
+          const firstModel = data.models[0].name;
+          document.getElementById('ollamaModel').value = firstModel;
+          statusEl.innerHTML = `<span class="text-emerald-400">Found ${data.models.length} local model(s)! Selected: ${firstModel}</span>`;
+        } else {
+          statusEl.textContent = 'Connected to Ollama, but no models found. Run: ollama pull llama3.2';
+        }
+      } catch (e) {
+        statusEl.innerHTML = `<span class="text-amber-400">Could not reach ${endpoint}. Ensure Ollama is running with OLLAMA_ORIGINS="*" ollama serve</span>`;
+      }
+    }
+
+    // 5. Session & LocalStorage Persistence
+    function loadStateFromStorage() {
+      try {
+        const savedSessions = JSON.parse(localStorage.getItem(STORAGE_KEYS.SESSIONS) || '[]');
+        const savedMemories = JSON.parse(localStorage.getItem(STORAGE_KEYS.MEMORY) || '[]');
+        sessions = Array.isArray(savedSessions) ? savedSessions : [];
+        customMemories = Array.isArray(savedMemories) ? savedMemories : [];
+      } catch (e) {
+        sessions = [];
+        customMemories = [];
+      }
+
+      if (sessions.length === 0) {
+        createNewSession(false);
+      } else {
+        currentSessionId = sessions[0].id;
+      }
+      renderSessionList();
+      renderCurrentChat();
+      renderMemoryModalList();
+    }
+
+    function saveSessionsToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
+      } catch (e) {}
+    }
+
+    function getCurrentSession() {
+      return sessions.find(s => s.id === currentSessionId) || sessions[0];
+    }
+
+    function createNewSession(shouldRender = true) {
+      const newSession = {
+        id: 'chat_' + Date.now(),
+        title: 'New Offline Chat',
+        updatedAt: Date.now(),
+        messages: [
+          {
+            role: 'bot',
+            content: `👋 **Welcome to LocalAI Chat (100% Offline Edition)!**\n\nAll drawing tools have been removed—this is a fast, pure **Offline AI Chatbot**.\n\n• **Works Without Internet:** Built-in math solver, unit converter, offline code generator, text summarizer, and trainable local memory.\n• **Teach Me Anything:** Type \`Remember that my Wi-Fi password is ...\` and I'll store it locally on your device.\n• **Optional Localhost LLM:** Connect to **Ollama** (\`http://localhost:11434\`) anytime using the top toggle.`
+          }
+        ]
+      };
+      sessions.unshift(newSession);
+      currentSessionId = newSession.id;
+      saveSessionsToStorage();
+      if (shouldRender) {
+        renderSessionList();
+        renderCurrentChat();
+      }
+    }
+
+    function switchSession(id) {
+      currentSessionId = id;
+      renderSessionList();
+      renderCurrentChat();
+    }
+
+    function deleteSession(id, event) {
+      event.stopPropagation();
+      sessions = sessions.filter(s => s.id !== id);
+      if (sessions.length === 0) {
+        createNewSession(true);
+        return;
+      }
+      if (currentSessionId === id) {
+        currentSessionId = sessions[0].id;
+      }
+      saveSessionsToStorage();
+      renderSessionList();
+      renderCurrentChat();
+    }
+
+    function clearAllSessions() {
+      sessions = [];
+      createNewSession(true);
+    }
+
+    function renderSessionList() {
+      const container = document.getElementById('sessionList');
+      container.innerHTML = '';
+      sessions.forEach(sess => {
+        const isActive = sess.id === currentSessionId;
+        const item = document.createElement('div');
+        item.onclick = () => switchSession(sess.id);
+        item.className = `group flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition ${
+          isActive
+            ? 'bg-slate-800 text-white font-medium border border-slate-700/80'
+            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+        }`;
+        item.innerHTML = `
+          <div class="flex items-center gap-2 truncate pr-2">
+            <i class="fa-regular fa-message text-[11px] ${isActive ? 'text-emerald-400' : 'text-slate-500'}"></i>
+            <span class="truncate">${escapeHtml(sess.title)}</span>
+          </div>
+          <button onclick="deleteSession('${sess.id}', event)" class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 p-1 transition" title="Delete chat">
+            <i class="fa-solid fa-trash-can text-[10px]"></i>
+          </button>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function formatMarkdownOffline(raw) {
+      let html = escapeHtml(raw);
+
+      // Format fenced code blocks with Copy button
+      html = html.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+        const encoded = encodeURIComponent(code.trim());
+        return `
+          <div class="my-2.5 rounded-xl overflow-hidden border border-slate-700/90 bg-slate-950">
+            <div class="px-3 py-1.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-[11px] text-slate-400 mono">
+              <span>${lang || 'code'}</span>
+              <button type="button" onclick="copyCodeBlock('${encoded}', this)" class="text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                <i class="fa-regular fa-copy"></i>
+                <span>Copy</span>
+              </button>
+            </div>
+            <pre class="p-3 text-xs mono text-emerald-300 overflow-x-auto leading-relaxed"><code>${code.trim()}</code></pre>
+          </div>
+        `;
+      });
+
+      // Inline formatting
+      html = html
+        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em class="text-slate-200">$1</em>')
+        .replace(/`([^`]+)`/g, '<code class="px-1.5 py-0.5 rounded bg-slate-950 text-emerald-300 mono text-xs border border-slate-800">$1</code>')
+        .replace(/\n/g, '<br/>');
+
+      return html;
+    }
+
+    function copyCodeBlock(encodedText, btnEl) {
+      const decoded = decodeURIComponent(encodedText);
+      const textarea = document.createElement('textarea');
+      textarea.value = decoded;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+
+      const original = btnEl.innerHTML;
+      btnEl.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i><span class="text-emerald-400">Copied</span>';
+      setTimeout(() => { btnEl.innerHTML = original; }, 1500);
+    }
+
+    function renderCurrentChat() {
+      const container = document.getElementById('chatContainer');
+      const session = getCurrentSession();
+      document.getElementById('currentChatTitle').textContent = session?.title || 'Offline AI Chat';
+      container.innerHTML = '';
+
+      (session?.messages || []).forEach(msg => {
+        appendMessageElement(msg.role, msg.content);
+      });
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function appendMessageElement(role, content) {
+      const container = document.getElementById('chatContainer');
+      const row = document.createElement('div');
+      row.className = `max-w-4xl mx-auto flex gap-3 ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+
+      if (role === 'user') {
+        row.innerHTML = `
+          <div class="max-w-[85%] sm:max-w-[75%] rounded-2xl rounded-br-sm px-4 py-2.5 bg-gradient-to-br from-sky-500 to-indigo-600 text-white text-sm leading-relaxed shadow-md">
+            ${escapeHtml(content).replace(/\n/g, '<br/>')}
+          </div>
+        `;
+      } else {
+        row.innerHTML = `
+          <div class="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-emerald-400">
+            <i class="fa-solid fa-robot text-xs"></i>
+          </div>
+          <div class="max-w-[88%] sm:max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 bg-slate-900 border border-slate-800 text-slate-200 text-sm leading-relaxed shadow">
+            ${formatMarkdownOffline(content)}
+          </div>
+        `;
+      }
+
+      container.appendChild(row);
+      container.scrollTop = container.scrollHeight;
+      return row;
+    }
+
+    async function processUserMessage(rawText) {
+      const text = rawText.trim();
+      if (!text) return;
+
+      const session = getCurrentSession();
+      session.messages.push({ role: 'user', content: text });
+
+      if (session.messages.length === 2 || session.title === 'New Offline Chat') {
+        session.title = text.slice(0, 34) + (text.length > 34 ? '...' : '');
+        renderSessionList();
+        document.getElementById('currentChatTitle').textContent = session.title;
+      }
+
+      appendMessageElement('user', text);
+
+      // Typing indicator
+      const container = document.getElementById('chatContainer');
+      const typingRow = document.createElement('div');
+      typingRow.className = 'max-w-4xl mx-auto flex gap-3 justify-start';
+      typingRow.innerHTML = `
+        <div class="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0 text-emerald-400">
+          <i class="fa-solid fa-robot text-xs"></i>
+        </div>
+        <div class="rounded-2xl px-4 py-3 bg-slate-900 border border-slate-800 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 dot-1"></span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 dot-2"></span>
+          <span class="w-2 h-2 rounded-full bg-emerald-400 dot-3"></span>
+        </div>
+      `;
+      container.appendChild(typingRow);
+      container.scrollTop = container.scrollHeight;
+
+      let replyText = '';
+      if (activeEngine === 'ollama') {
+        try {
+          replyText = await queryLocalOllama(text);
+        } catch (err) {
+          replyText = `⚠️ **Localhost Ollama Unreachable:** Could not connect to your local server, so I answered using the **Built-In Offline Browser Brain** instead:\n\n` + generateOfflineReply(text);
+        }
+      } else {
+        await new Promise(r => setTimeout(r, 180));
+        replyText = generateOfflineReply(text);
+      }
+
+      typingRow.remove();
+      session.messages.push({ role: 'bot', content: replyText });
+      session.updatedAt = Date.now();
+      saveSessionsToStorage();
+      appendMessageElement('bot', replyText);
+    }
+
+    // Custom Memory Bank Helpers
+    function saveMemoryItem(key, value) {
+      customMemories.unshift({ id: 'mem_' + Date.now(), key: key.trim(), value: value.trim() });
+      try {
+        localStorage.setItem(STORAGE_KEYS.MEMORY, JSON.stringify(customMemories));
+      } catch (e) {}
+      renderMemoryModalList();
+    }
+
+    function deleteMemoryItem(id) {
+      customMemories = customMemories.filter(m => m.id !== id);
+      try {
+        localStorage.setItem(STORAGE_KEYS.MEMORY, JSON.stringify(customMemories));
+      } catch (e) {}
+      renderMemoryModalList();
+    }
+
+    function addCustomMemoryFromModal() {
+      const k = document.getElementById('memKeyInput').value.trim();
+      const v = document.getElementById('memValInput').value.trim();
+      if (!k || !v) return;
+      saveMemoryItem(k, v);
+      document.getElementById('memKeyInput').value = '';
+      document.getElementById('memValInput').value = '';
+    }
+
+    function renderMemoryModalList() {
+      document.getElementById('memoryCountBadge').textContent = customMemories.length;
+      const list = document.getElementById('memoryListContainer');
+      if (!list) return;
+      if (customMemories.length === 0) {
+        list.innerHTML = `<div class="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-500 text-center">No custom memories stored yet.</div>`;
+        return;
+      }
+      list.innerHTML = customMemories.map(m => `
+        <div class="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
+          <div class="truncate">
+            <span class="font-semibold text-emerald-300">${escapeHtml(m.key)}:</span>
+            <span class="text-slate-300 ml-1">${escapeHtml(m.value)}</span>
+          </div>
+          <button onclick="deleteMemoryItem('${m.id}')" class="text-slate-500 hover:text-rose-400 px-1.5">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function setEngine(mode) {
+      activeEngine = mode;
+      document.getElementById('engineSelectModal').value = mode;
+      const btnBrowser = document.getElementById('btnModeBrowser');
+      const btnOllama = document.getElementById('btnModeOllama');
+      const shortBadge = document.getElementById('engineShortBadge');
+      const footer = document.getElementById('statusFooter');
+
+      if (mode === 'browser') {
+        btnBrowser.className = 'px-2.5 py-1 rounded-lg font-medium bg-emerald-500 text-slate-950 transition';
+        btnOllama.className = 'px-2.5 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition';
+        shortBadge.textContent = 'In-Browser JS';
+        footer.textContent = 'Engine: Built-In Offline JavaScript Brain (No internet used)';
+      } else {
+        btnOllama.className = 'px-2.5 py-1 rounded-lg font-medium bg-sky-500 text-slate-950 transition';
+        btnBrowser.className = 'px-2.5 py-1 rounded-lg font-medium text-slate-400 hover:text-white transition';
+        shortBadge.textContent = 'Local Ollama';
+        footer.textContent = 'Engine: Localhost Ollama Server (100% Offline Local Hardware)';
+      }
+    }
+
+    function changePersona(val) {
+      activePersona = val;
+    }
+
+    function sendQuickPrompt(promptText) {
+      processUserMessage(promptText);
+    }
+
+    function exportChatMarkdown() {
+      const session = getCurrentSession();
+      if (!session) return;
+      const lines = [`# ${session.title}\n`];
+      session.messages.forEach(m => {
+        lines.push(`### ${m.role === 'user' ? 'You' : 'Offline AI'}\n${m.content}\n`);
+      });
+      const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${session.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function toggleSidebar() {
+      const sb = document.getElementById('sidebar');
+      sb.classList.toggle('-translate-x-full');
+    }
+
+    function toggleMemoryModal() {
+      document.getElementById('memoryModal').classList.toggle('hidden');
+    }
+
+    function toggleSettingsModal() {
+      document.getElementById('settingsModal').classList.toggle('hidden');
+    }
+
+    // Composer Event Listeners
+    const userInputEl = document.getElementById('userInput');
+    userInputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        document.getElementById('chatForm').requestSubmit();
+      }
+    });
+
+    document.getElementById('chatForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const val = userInputEl.value;
+      if (!val.trim()) return;
+      userInputEl.value = '';
+      processUserMessage(val);
+    });
+
+    window.onload = () => {
+      loadStateFromStorage();
+    };
+  </script>
+</body>
+</html>
